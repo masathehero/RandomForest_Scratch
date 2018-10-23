@@ -1,15 +1,17 @@
 import numpy as np
 from DecisionTree_Module import DecisionTree
-# from sklearn.tree import DecisionTreeClassifier
 
 
 class RandomForest():
-    def __init__(self, n_estimators=5, max_depth=None, ind_size=None, col_size=None, random_state=None):
+    def __init__(self, n_estimators=5, max_depth=None, tree='scratch',
+                 random_state=None, ind_size=None, col_size=None):
+        assert tree in ['scratch', 'sklearn'], 'tree argument >> ["scratch", "sklearn"]'
         self.n_estimators = n_estimators
         self.max_depth = max_depth
+        self.tree = tree
+        self.random_state = random_state
         self.ind_size = ind_size
         self.col_size = col_size
-        self.random_state = random_state
 
     def _boot_strap(self, X, y):
         '''ブートストラップサンプリング'''
@@ -35,8 +37,11 @@ class RandomForest():
         self.sample_col_ls = list()
         for i in range(self.n_estimators):
             sample_X, sample_y, sample_col = self._boot_strap(X, y)
-            # clf = DecisionTreeClassifier(random_state=self.random_state)
-            clf = DecisionTree(max_depth=self.max_depth)
+            if self.tree == 'scratch':
+                clf = DecisionTree(max_depth=self.max_depth)
+            elif self.tree == 'sklearn':
+                from sklearn.tree import DecisionTreeClassifier
+                clf = DecisionTreeClassifier(random_state=self.random_state)
             clf.fit(sample_X, sample_y)
             self.clf_ls.append(clf)  # 学習器の格納
             self.sample_col_ls.append(sample_col)  # サンプリングした列の格納
@@ -47,7 +52,8 @@ class RandomForest():
         predict_ls = list()
         for clf, sample_col in zip(self.clf_ls, self.sample_col_ls):
             sample_testX = X[:, sample_col]
-            predict_ls.append(clf.predict(sample_testX))
+            tree_pred = clf.predict(sample_testX)
+            predict_ls.append(tree_pred)
         predictions = np.array(predict_ls)
         # 各学習器の予測で、多数決を取る
         final_pred_ls = list()

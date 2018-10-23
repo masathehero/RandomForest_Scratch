@@ -11,7 +11,7 @@ if __name__ == '__main__':
             iris.data, iris.target, test_size=0.20)
 
     # training and prediction
-    rf = RandomForest(n_estimators=10, max_depth=None)
+    rf = RandomForest(n_estimators=10, max_depth=None, tree='scratch')
     rf.fit(X_train, y_train)
     pred = rf.predict(X_test)
 

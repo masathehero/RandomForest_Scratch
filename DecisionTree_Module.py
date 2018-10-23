@@ -15,34 +15,27 @@ class GiniCalculater():
         gini_val2, leaf_size2 = self._cal_gini(cl_dist2)
         gini_ls = [gini_val1, gini_val2]
         leaf_size_ls = [leaf_size1, leaf_size2]
-
         ave_gini = np.average(gini_ls, weights=leaf_size_ls)
         return ave_gini
 
 
 class DataSplitter(GiniCalculater):
-    def _split_ans(self, feat, ans, thresh):
-        '''教師データを、特徴量のある特定のthreshで分ける'''
-        feat = np.array(feat)
-        ans = np.array(ans)
-        ind = feat < thresh
-        small_leaf_ans = ans[ind]
-        large_leaf_ans = ans[~ind]
-        return small_leaf_ans, large_leaf_ans
-
     def _count_leaf_size(self, leaf_ans):
         '''そのノードで、各クラスのデータが何個存在するかカウント'''
         leaf_ans = np.array(leaf_ans)
         unique_class = list(set(leaf_ans))
-        cl_size = [np.sum(leaf_ans == cls) for cls in unique_class]
-        return cl_size
+        cl_dist = [np.sum(leaf_ans == cls) for cls in unique_class]
+        return cl_dist
 
-    # 上の二つのモジュールを使う
     def _cal_feature_gini(self, feat, ans, thresh):
-        '''ある特徴量で、あるthreshの時のジニ係数の計算'''
-        small_leaf, large_leaf = self._split_ans(feat, ans, thresh)
-        cl_dist1 = self._count_leaf_size(large_leaf)
-        cl_dist2 = self._count_leaf_size(small_leaf)
+        '''ある特徴量でのあるthreshで分割した時のジニ係数の計算'''
+        # まず、threshでleafを分ける
+        ind = feat < thresh
+        small_leaf_ans = ans[ind]
+        large_leaf_ans = ans[~ind]
+        # ジニ係数を計算
+        cl_dist1 = self._count_leaf_size(large_leaf_ans)
+        cl_dist2 = self._count_leaf_size(small_leaf_ans)
         gini = self.average_gini(cl_dist1, cl_dist2)
         return gini
 
@@ -57,23 +50,19 @@ class DataSplitter(GiniCalculater):
 
             if smallest_gini > single_feat_gini.min():
                     smallest_gini = single_feat_gini.min()
+                    # issue: threshの決め方は工夫の余地あり
                     thresh = thresh_list[single_feat_gini.argmin()]
                     best_split_point = (feat_col, thresh, smallest_gini)
-        # print('splitting point: feature={0}, thresh={1}, gini={2}'.format(
-        #    best_split_point[0], best_split_point[1], best_split_point[2]))
         return best_split_point
 
     def split_data(self, features, ans):
         '''特徴量、及び教師ラベルを、best_pointでsplit'''
-        if len(set(ans)) > 1:
-            feat_col, thresh, _ = self._best_split_point(features, ans)
-            ind = features[:, feat_col] < thresh
-            small_features = list([features[ind], ans[ind]])
-            large_features = list([features[~ind], ans[~ind]])
-            return small_features, large_features, feat_col, thresh
-        else:
-            org_features = list([features, ans])
-            return org_features
+        # issue: feature_importance計算するならsmallest_giniも必要だけど、今回は割愛
+        feat_col, thresh, _ = self._best_split_point(features, ans)
+        ind = features[:, feat_col] < thresh
+        small_features = list([features[ind], ans[ind]])
+        large_features = list([features[~ind], ans[~ind]])
+        return small_features, large_features, feat_col, thresh
 
 
 class DecisionTree(DataSplitter):
@@ -90,32 +79,29 @@ class DecisionTree(DataSplitter):
         # print('Depth: %s,' % self._depth, end='\n')
 
         X_new, y_new = list(), list()
+        is_max_depth = (self._depth == self.max_depth)
         for feat, ans in zip(X, y):
-            if len(set(ans)) == 1:
+            is_leaf_converge = (len(set(ans)) == 1)
+            is_no_unique_feature = (len(np.unique(feat, axis=0)) == 1)
+            if is_max_depth | is_leaf_converge | is_no_unique_feature:
+                # 収束したleafについて、パラメータの保存
                 X_new.append(feat)
                 y_new.append(ans)
                 feat_col, thresh = None, None
-                cls_no = np.argmax(np.bincount(ans))
+                cls_no = np.argmax(np.bincount(ans))  # leafのクラス
                 self._params_ls.append((self._depth, feat_col, thresh, cls_no))
             else:
+                # 収束してないleafについては、再びsplitする
                 small_features, large_features, feat_col, thresh = self.split_data(feat, ans)
-                X_new.append(small_features[0])
-                y_new.append(small_features[1])
-                X_new.append(large_features[0])
-                y_new.append(large_features[1])
+                X_new = X_new + [small_features[0]] + [large_features[0]]
+                y_new = y_new + [small_features[1]] + [large_features[1]]
                 cls_no = None
                 self._params_ls.append((self._depth, feat_col, thresh, cls_no))
-        self._depth += 1
-        # 終了条件: 全てのノードが、単一クラスになった時
-        if (len(X) == len(X_new)) | (self._depth == self.max_depth):
+        # 終了条件: 一回もleafがsplitされなかった時
+        if len(X) == len(X_new):
             self.params = np.array(self._params_ls)
-            '''
-            if (len(X) == len(X_new)):
-                print('all leaves converged')
-            else:
-                print('reached max depth')
-            '''
         else:
+            self._depth += 1
             return self.fit(X_new, y_new)
 
     def predict(self, X):
@@ -124,32 +110,30 @@ class DecisionTree(DataSplitter):
             self.result_ind = np.array([])
             self.result_cls_no = np.array([])
             ind_no = np.arange(len(X)).reshape(len(X), 1)
-            X = list([np.concatenate([X, ind_no], axis=1)])
-        # この階層で使うパラメータをだけを引っ張ってくる
+            X = list([np.concatenate([X, ind_no], axis=1)])  # 元のindex_noを付けておく
+        # この階層で使うパラメータだけを引っ張ってくる
         valid_params = self.params[self.params[:, 0] == self._pred_depth]
         Xpred = list()
         for feat, vp in zip(X, valid_params):
             _, feat_col, thresh, cls_no = vp
             if cls_no is not None:
-                # cls_noがNoneではないleafは収束している
+                # 収束したleafの結果を保存 (cls_noがNoneではないleafは収束している)
                 if feat.shape[0] >= 1:
                     cls_no_full = np.full(len(feat), cls_no)
                     self.result_ind = np.append(self.result_ind, feat[:, -1])
                     self.result_cls_no = np.append(self.result_cls_no, cls_no_full)
-                # 次のzip(X, valid_params)でsizeが合うようにpadding
-                Xpred.append(feat)
-                continue
-            ind = feat[:, feat_col] < thresh
-            # 次の再帰に渡すXを保存
-            feat_small, feat_large = feat[ind], feat[~ind]
-            Xpred.append(feat_small)
-            Xpred.append(feat_large)
-        self._pred_depth += 1
-        # 終了条件：fitした時の_depthに到達したら
+                Xpred.append(feat)  # 次のzip(X, valid_params)でsizeが合うようにpadding
+            else:
+                # 次の再帰に渡すXを保存
+                ind = feat[:, feat_col] < thresh
+                feat_small, feat_large = feat[ind], feat[~ind]
+                Xpred = Xpred + [feat_small] + [feat_large]
+        # 終了条件：fitした時のdepthに到達したら
         if self._pred_depth >= self._depth:
             self._pred_depth = 0
             result = np.conj([self.result_ind, self.result_cls_no])
-            result = np.unique(result, axis=1)[1].astype(int)
+            result = np.unique(result, axis=1)[1].astype(int)  # np.uniqueでソートもしてくれる
             return result
         else:
+            self._pred_depth += 1
             return self.predict(Xpred)
