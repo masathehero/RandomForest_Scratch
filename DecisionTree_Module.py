@@ -85,8 +85,6 @@ class DecisionTree(DataSplitter):
             is_no_unique_feature = (len(np.unique(feat, axis=0)) == 1)
             if is_max_depth | is_leaf_converge | is_no_unique_feature:
                 # 収束したleafについて、パラメータの保存
-                X_new.append(feat)
-                y_new.append(ans)
                 feat_col, thresh = None, None
                 cls_no = np.argmax(np.bincount(ans))  # leafのクラス
                 self._params_ls.append((self._depth, feat_col, thresh, cls_no))
@@ -98,7 +96,7 @@ class DecisionTree(DataSplitter):
                 cls_no = None
                 self._params_ls.append((self._depth, feat_col, thresh, cls_no))
         # 終了条件: 一回もleafがsplitされなかった時
-        if len(X) == len(X_new):
+        if len(X_new) == 0:
             self.params = np.array(self._params_ls)
         else:
             self._depth += 1
@@ -122,7 +120,6 @@ class DecisionTree(DataSplitter):
                     cls_no_full = np.full(len(feat), cls_no)
                     self.result_ind = np.append(self.result_ind, feat[:, -1])
                     self.result_cls_no = np.append(self.result_cls_no, cls_no_full)
-                Xpred.append(feat)  # 次のzip(X, valid_params)でsizeが合うようにpadding
             else:
                 # 次の再帰に渡すXを保存
                 ind = feat[:, feat_col] < thresh
@@ -132,7 +129,7 @@ class DecisionTree(DataSplitter):
         if self._pred_depth >= self._depth:
             self._pred_depth = 0
             result = np.conj([self.result_ind, self.result_cls_no])
-            result = np.unique(result, axis=1)[1].astype(int)  # np.uniqueでソートもしてくれる
+            result = np.unique(result, axis=1)[1].astype(int)  # np.uniqueでソートもしてくれる。
             return result
         else:
             self._pred_depth += 1
