@@ -1,5 +1,4 @@
 import numpy as np
-from DecisionTree_Module import DecisionTree
 
 
 class RandomForest():
@@ -38,10 +37,11 @@ class RandomForest():
         for i in range(self.n_estimators):
             sample_X, sample_y, sample_col = self._boot_strap(X, y)
             if self.tree == 'scratch':
+                from DecisionTree_Module import DecisionTree
                 clf = DecisionTree(max_depth=self.max_depth)
             elif self.tree == 'sklearn':
                 from sklearn.tree import DecisionTreeClassifier
-                clf = DecisionTreeClassifier(random_state=self.random_state)
+                clf = DecisionTreeClassifier(max_depth=self.max_depth, random_state=self.random_state)
             clf.fit(sample_X, sample_y)
             self.clf_ls.append(clf)  # 学習器の格納
             self.sample_col_ls.append(sample_col)  # サンプリングした列の格納
