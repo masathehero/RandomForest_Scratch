@@ -47,7 +47,6 @@ class DataSplitter(GiniCalculater):
             thresh_list = np.unique(feat)
             single_feat_gini = np.array(
                     [self._cal_feature_gini(feat, ans, thresh) for thresh in thresh_list])
-
             if smallest_gini > single_feat_gini.min():
                     smallest_gini = single_feat_gini.min()
                     # issue: threshの決め方は工夫の余地あり
@@ -123,7 +122,6 @@ class DecisionTree(DataSplitter):
         Xpred = list()
         for feat, vp in zip(X, valid_params):
             _, candidate_col, feat_col, thresh, cls_no = vp
-            # feat = feat[:, candidate_col]
             if cls_no is not None:
                 # 収束したleafの結果を保存 (cls_noがNoneではないleafは収束している)
                 if feat.shape[0] >= 1:
